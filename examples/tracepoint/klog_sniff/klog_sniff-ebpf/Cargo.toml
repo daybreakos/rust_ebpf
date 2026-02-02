@@ -1,0 +1,17 @@
+[package]
+name = "klog_sniff-ebpf"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+klog_sniff-common = { path = "../klog_sniff-common" }
+
+aya-ebpf = { workspace = true }
+aya-log-ebpf = { workspace = true }
+
+[build-dependencies]
+which = { workspace = true }
+
+[[bin]]
+name = "klog_sniff"
+path = "src/main.rs"
