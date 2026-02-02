@@ -1,6 +1,9 @@
-# Rust-eBPF: High-Performance Container Observability & Security
+# Rust-eBPF: Programming for next-generation Networking, Observability & Security and more.
 
 **Overview:** 
+
+Intent of the this repo is to use Rust for eBPF  to stream line Instrumentation without the C toolchain.
+Rust based approach allows to implement Kernel logic with memory safety and zero-dependencies.
 
 Repository explores **eBPF (extended Berkeley Packet Filter)** through the lens of **Rust**. 
 
