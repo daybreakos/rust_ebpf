@@ -2,22 +2,23 @@
 
 **Overview:** 
 
-This repository is a comprehensive exploration of **eBPF (extended Berkeley Packet Filter)** through the 
-lens of **Rust**. 
-With Basic idea of demonstrating on how to build production-grade, container-aware tooling for networking, 
-security, and observability using the **Aya** framework and also explore other ways to write programs. 
+Repository explores **eBPF (extended Berkeley Packet Filter)** through the lens of **Rust**. 
+
+Demonstrating on how to build production-grade, container-aware tooling for networking, security, and 
+observability using the **Aya** framework and also explore other ways to write programs. 
 
 Traditional eBPF development generally relies on C and LLVM dependencies at runtime.
 This project leverages Rust to provide:
-    - **compile-time safety**, 
-    - **shared data structures**, and 
-    - **zero-dependency binaries** for modern Linux environments.
+
+- **compile-time safety**, 
+- **shared data structures**, and 
+- **zero-dependency binaries** for modern Linux environments.
 
 ---
 
 ##  Why Rust?
 
-As of 2026 Rust has become the preferred language for kernel-adjacent tooling
+As of 2026 Rust has become the preferred language for kernel-adjacent tooling:
 
 * **Safety First:**
     - Linux kernel verifier is a strict gatekeeper. Is very picky with constrains.
@@ -31,7 +32,7 @@ As of 2026 Rust has become the preferred language for kernel-adjacent tooling
     - You release/ship a single, static binary.
     - Easy to cross build to different targets.
 
-* **Aya Framework:** 
+* => **Aya Framework:** <=
     - No need to work with multiple languages to run/control/monitor eBPF programs, which is found with `C`
       or `libbpf` based tooling, Aya allows for a 100% Rust workflow. 
 
