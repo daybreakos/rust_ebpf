@@ -1,6 +1,6 @@
 # tracepoint example:
 
-Note: the project is  built on using aya-template:
+Note: the project is  built using aya-template:
 
 Tracepoint program hooks into a specific event in the Linux kernels `printk` subsystem and 'console' 
 event. ( /sys/kernel/debug/tracepoints/events/printk/console/ )
