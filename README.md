@@ -112,6 +112,15 @@ generates true CO-RE.
     - Async approach allows single user-space daemon/program to handle millions of events per second for
       multiple hooks across different containers with minimal CPU jitter. 
 
+- **High-Throughput Performance (Packet/Event Analytics)**
+    - Rust compiled binaries run with performance *equal to or better than C*. Providing zero-cost
+      abstractions for low-latency works.
+    - Attaching eBPF programs to XDP or TC can pushing millions of events per second into
+      `RingBuffer` maps. 
+    - Using async eco-system (`Tokio`) and parallel processing (Rayon) crates to drain and analyze kernel buffers with minimal latency.
+
+- And more... 
+
 Source folder has examples that cover different use-case's.
 Documents folder contains concepts and how to implement using Rust.
 
