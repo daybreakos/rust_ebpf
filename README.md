@@ -121,19 +121,6 @@ generates true CO-RE.
 
 - And more... 
 
-Source folder has examples that cover different use-case's.
-Documents folder contains concepts and how to implement using Rust.
-
-
-Existing Tools vs. This repo:
-
-| Feature | BCC / libbpf (C) | This Project (Rust/Aya) |
-| --- | --- | --- |
-| **Development** | Manual C headers / Python wrappers | Pure Rust |
-| **Safety** | Runtime Verifier checks only | Compile-time + Runtime checks |
-| **Portability** | Requires `clang`/`llvm` on host | Single static binary |
-| **Container Awareness** | Manual PID filtering | Native cgroup-v2 integration |
-
 ---
 
 Typical Rust - Aya based repository structure:
