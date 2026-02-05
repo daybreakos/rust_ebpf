@@ -1,13 +1,13 @@
 # tracepoint example:
 
-Note: the project is extracted from aya-template and extended:
+Note: the project is  built on using aya-template:
 
-Tracepoint program  that hooks into a specific event in the Linux kernels `printk` subsystem and 'console' 
+Tracepoint program hooks into a specific event in the Linux kernels `printk` subsystem and 'console' 
 event. ( /sys/kernel/debug/tracepoints/events/printk/console/ )
 
 (likely `printk` or a similar diagnostic event) to log process IDs and their associated messages.
 
-Here is a breakdown of how the program works, from the environment setup to the memory manipulation.
+Breakdown of how the program works, from the environment setup to the memory manipulation.
 
 ---
 
@@ -35,7 +35,7 @@ messages).
 
 3. Handling Dynamic Data (`__data_loc`)
 
-In kernel tracepoints, strings are often stored using a mechanism called **`__data_loc`**. 
+In kernel `tracepoints`, strings are often stored using a mechanism called **`__data_loc`**. 
 Instead of the string being inside the fixed `struct`, the `struct` contains a 32-bit integer that acts as 
 a "pointer" to where the string actually lives in memory.
 
@@ -110,28 +110,4 @@ The log has to be caught by our program and display
 Cargo build scripts are used to automatically build the eBPF correctly and include it in the
 program.
 
-
-## License
-
-With the exception of eBPF code, klog_sniff is distributed under the terms
-of either the [MIT license] or the [Apache License] (version 2.0), at your
-option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this crate by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
-
-### eBPF
-
-All eBPF code is distributed under either the terms of the
-[GNU General Public License, Version 2] or the [MIT license], at your
-option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the GPL-2 license, shall be
-dual licensed as above, without any additional terms or conditions.
-
-[Apache license]: LICENSE-APACHE
-[MIT license]: LICENSE-MIT
-[GNU General Public License, Version 2]: LICENSE-GPL2
 
