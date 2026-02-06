@@ -52,7 +52,7 @@ verifier rejection.
 ---
 
 - Applications developed this way produce self contained binaries that do not require LLVM, Clang, or BCC
-  at runtime, and still supporting true CO-RE, which makes it a right tooling for servers to resource
+  at runtime, and still supporting true CO-RE, which makes it a right tool for large servers to resource
   constrained embedded systems. 
 
 ---
@@ -137,7 +137,6 @@ This project also explores:
 
 * **BTF (BPF Type Format):** Ensuring "Compile Once – Run Everywhere" (CO-RE) portability.
 * **Async/Await in User-space:** Utilizing `Tokio` to process high-throughput event streams from eBPF maps.
-* **eBPF on Windows:** Investigating the portability of Rust-based eBPF logic to non-Linux kernels.
 
 ---
 
