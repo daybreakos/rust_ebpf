@@ -83,10 +83,9 @@ generates true CO-RE.
     - Easy to cross build to different targets.
 
 - => **Aya Framework:** <=
-    - No need to work with multiple languages to run/control/monitor eBPF programs, which is found with `C`
-      or `libbpf` based tooling, Aya allows for a 100% Rust workflow. 
+    - `libbpf` based tooling require C,C++,Go,python, multiple languages to run/control/monitor eBPF programs, Aya allows for a 100% Rust workflow. 
     - No dependency on **`libbcc`** or **`llvm`** on the target machine.
-    - And its BTF aware.
+    - BTF aware.
     - Build / cross built once can run on different targets ( CO-RE )
 
 - **Shared Codebase and binary layout:** 
