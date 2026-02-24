@@ -485,12 +485,12 @@ Above UDP-redirector into **Rust** using the **Aya** framework.
 ### 1. The Kernel-Space Program (`src/main.rs` in the eBPF crate)
 
 In Aya, we use the `network_types` crate to handle the manual parsing we discussed.
-
 ```rust
 #![no_std]
 #![no_main]
 
 use aya_ebpf::{
+    bindings::xdp_action, // Now explicitly imported
     macros::{map, xdp},
     maps::XskMap,
     programs::XdpContext,
@@ -502,46 +502,46 @@ use network_types::{
     ip::{IpProto, Ipv4Hdr},
 };
 
-// Define the XSK Map (same as the C version)
-#[map(name = "XSK_MAP")]
-static mut XSK_MAP: XskMap = XskMap::with_max_entries(64, 0);
+// 1. Map definition update: static mut is generally replaced by just static
+// in newer Aya macros, and we use the macro to handle initialization.
+#[map]
+static XSK_MAP: XskMap = XskMap::with_max_entries(64, 0);
 
 #[xdp]
 pub fn xdp_sock_prog(ctx: XdpContext) -> u32 {
     match try_xdp_sock_prog(ctx) {
         Ok(ret) => ret,
+        // 2. xdp_action is now accessed via the binding enum
         Err(_) => xdp_action::XDP_ABORTED,
     }
 }
 
 fn try_xdp_sock_prog(ctx: XdpContext) -> Result<u32, ()> {
-    let data = ctx.data();
-    let data_end = ctx.data_end();
-
-    // 1. Parse Ethernet Header
+    // 3. Ethernet Header Parsing
     let eth = unsafe { ptr_at::<EthHdr>(&ctx, 0)? };
-    
-    // 2. Check for IPv4
-    if unsafe { (*eth).ether_type } != EtherType::Ipv4 {
+
+    // Use be_to_cpu or specific EtherType constants if needed,
+    // but matching the original logic:
+    if unsafe { (*eth).ether_type } != u16::from(EtherType::Ipv4) {
         return Ok(xdp_action::XDP_PASS);
     }
 
-    // 3. Parse IP Header (Offset by size of Ethernet header)
+    // 4. IP Header Parsing
     let iph = unsafe { ptr_at::<Ipv4Hdr>(&ctx, EthHdr::LEN)? };
 
-    // 4. Power of Decision: Redirect UDP
     if unsafe { (*iph).proto } == IpProto::Udp {
         let index = ctx.rx_queue_index();
-        // Redirect to the AF_XDP socket registered in the map
-        return Ok(unsafe { XSK_MAP.redirect(index, 0) as u32 });
+
+        // 5. XskMap redirection
+        // XskMap::redirect returns a u32 representing XDP_REDIRECT or the action
+        return Ok(XSK_MAP.redirect(index, 0).unwrap_or(xdp_action::XDP_PASS));
     }
 
     Ok(xdp_action::XDP_PASS)
 }
 
-// Helper function to handle verifier-safe pointer arithmetic
 #[inline(always)]
-unsafe fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
+fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
     let start = ctx.data();
     let end = ctx.data_end();
     let len = mem::size_of::<T>();
@@ -552,9 +552,7 @@ unsafe fn ptr_at<T>(ctx: &XdpContext, offset: usize) -> Result<*const T, ()> {
 
     Ok((start + offset) as *const T)
 }
-
 ```
-
 ---
 
 ### 2. The User-Space Loader (`src/main.rs` in the User crate)
@@ -1339,4 +1337,3 @@ We have covered a massive amount of ground for your Realtek benchmarking project
 * **The Analytics:** Exporting eBPF data to **Prometheus/Grafana**.
 
 This setup gives you a professional-grade environment to prove exactly how XDP stacks up against DPDK on your hardware.
-
