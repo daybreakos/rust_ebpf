@@ -12,7 +12,7 @@ Traditional tools using `iptables`, `kprobes` operate after the kernel has alrea
 ### **Hook Point: XDP vs kprobe**
 
 - `kprobes` (The Spectator): 
-    Hooks into high-level kernel functions (e.g.,`ip_rcv`). 
+    Hooks into high-level kernel functions (e.g.,`ip_rcv` main entry point for IPv4 Packet ( layer 3 )). 
     By the time a `kprobe` triggers, the kernel has already allocated an `sk_buff` (socket buffer), 
     parsed headers, and consumed significant CPU cycles. It is primarily used for observability.
 
@@ -21,6 +21,7 @@ Traditional tools using `iptables`, `kprobes` operate after the kernel has alrea
     It executes before the `sk_buff` is even allocated. It is primarily used for **packet processing**.
 
 - Comparison:
+ 
 | Feature | kprobe | XDP |
 | --- | --- | --- |
 | **Location** | Kernel Functions (IP Stack) | NIC Driver (RX Path) |
