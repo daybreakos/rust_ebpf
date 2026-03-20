@@ -1,0 +1,11 @@
+[package]
+name = "hello-bpf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libbpf-rs = "0.26.1"
+libc = "0.2.183"
+
+[build-dependencies]
+libbpf-cargo = "0.26.1"
