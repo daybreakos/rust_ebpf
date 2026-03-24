@@ -358,5 +358,61 @@ Typical code layout includes:
 
 # `libbpf-rs` : 
 
+- `libbpf-rs`: this is official Rust wrapper around C library `libbpf` and this changes the work flow in
+  specific way.
+
+- The core concept: ( manage two different environments )
+  1. Kernel Side (`.bpf.rs`): This is still compiled to BPF bytecode. It has limited memory access and
+     must pass the kernel verifier. 
+  2. User-Space (Rust binary): This is standard Rust. It handles the loading logic and UI of the user
+     program.
+
+## How Rust handles libbpf concepts:
+
+- In regular C+libbpf we use a complex Makefile. In Rust we use a helper crate called `libbpf-cargo`
+  * It acts as a *build script* (`build.rs`)
+  * During compilation, it takes the C-style eBPF code ( or Rust-BPF code), compiles it using LLVM and
+    generated *Rust "Skeletons" automatically. 
+  * This means the eBPF maps and programs appear as native Rust struct's that you can call directly. 
+
+## Safety and Lifetime:
+
+The biggest challenge with `libbpf` in C is memory management—manually opening, loading, and destroying
+objects. 
+    - *RAII (Resource Acquisition Is Initialization)*: 
+       In libbpf-rs, when your Rust Skel object goes out of scope, the library automatically
+       detaches the programs and closes the file descriptors. No more leaking BPF links because
+       you forgot a close() call.
+    - Type Safety: 
+      If you define a Map in eBPF, the generated Rust skeleton ensures you are passing the correct
+      data types into that map from the user-space side.
+
+## Handling the "Unsafe" Bridge
+
+- `libbpf-rs` is a wrapper around a C library, => it is technically "unsafe" code under the hood, however
+  the crate provides a safe abstraction layer.
+
+- with `libbpf-rs` you spend most of the app's time (99%) of time in safe Rust.
+
+- The library handles the pointer arithmetic and FFI (Foreign Function Interface) calls to the underlying 
+  `libbpf` C code so you don't have to.
+
+
+## `libbpf-rs` Workflow:
+
+- Define: You write eBPF programs (often in C, though projects like aya allow pure Rust in the kernel,
+  `libbpf-rs` usually assumes the kernel side is compiled from C or specialized Rust).
+
+- Gen: `libbpf-cargo` generates a Rust "Skeleton" at compile time.
+
+- Load: In your main.rs, you call `ObjectBuilder` to load the bytecode.
+
+- Attach: You attach to the hook (e.g., `.attach()`).
+
+- Consume: You use `RingBuffers` or `PerfBuffers` to stream data from the kernel back to Rust. `libbpf-rs`
+  provides excellent asynchronous support for this, fitting perfectly into the tokio or async-std ecosystems.
+
+## Additional Details:
+
 - [**libbpf-rs** doc](../progs/libbpf-rs/Readme.md)
 

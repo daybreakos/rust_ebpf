@@ -104,8 +104,8 @@ struct {
         * finds map definitions
         * issues syscalls to the kernel.
 
-- Final step: ( after the bpf() syscall from loader program:)
-    * The kernel: when the syscall (bpf()) issues for map creation,
+- Final step: ( after the `bpf()` syscall from loader program:)
+    * The kernel: when the syscall (`bpf()`) issues for map creation,
     * kernel allocates memory
     * sets map type, size, etc.
     * returns a file descriptor (FD)
@@ -697,22 +697,28 @@ By using a BPF Map, you've moved from just "printing logs" to **State Management
 * The **Kernel** does the heavy lifting: filtering, counting, and aggregating.
 * The **Rust App** only wakes up occasionally to read the final results.
 
-This is exactly how high-performance tools like **Cilium** (networking) or **Falco** (security) work. They perform millions of checks per second in the kernel and only send relevant summaries to the user-space application.
+This is exactly how high-performance tools like **Cilium** (networking) or **Falco** (security) work. They
+perform millions of checks per second in the kernel and only send relevant summaries to the user-space
+application.
 
 
-Next: Example explore how to send complex data (like full file paths or network headers) using `RingBuffer`, which is much faster than standard Maps for streaming events.
+Next: Example explore how to send complex data (like full file paths or network headers) using `RingBuffer`,
+which is much faster than standard Maps for streaming events.
 
 -------------------
 # maps (ringbugger : example 2)
 
-While **BPF Maps** are great for storing state (like counters), they aren't ideal for "streaming" events (like every time a file is opened). For high-performance logging, the **RingBuffer** is the modern standard. 
+While **BPF Maps** are great for storing state (like counters), they aren't ideal for "streaming" events
+(like every time a file is opened). For high-performance logging, the **RingBuffer** is the modern standard. 
 
-It is a specialized memory area where the kernel writes data into a circular buffer, and your Rust app "polls" that data. It is much faster and more memory-efficient than older methods like `PerfBuffer`.
+It is a specialized memory area where the kernel writes data into a circular buffer, and your Rust app
+"polls" that data. It is much faster and more memory-efficient than older methods like `PerfBuffer`.
 
 ---
 
 ### 1. Define the Data Structure
-To send complex data, we first define a shared C struct. This struct must be exactly the same size in both C and Rust (we use `#[repr(C)]` in Rust for this).
+To send complex data, we first define a shared C struct. This struct must be exactly the same size in both C
+and Rust (we use `#[repr(C)]` in Rust for this).
 
 **In `hello.bpf.c`:**
 ```c
@@ -802,9 +808,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ---
 
 ### Why use RingBuffer over Maps?
-1. **Low Overhead:** The kernel doesn't have to wait for the user-space app. It just drops the data in the buffer and moves on.
-2. **Memory Ordering:** It guarantees that the user-space app sees the events in the exact order they happened in the kernel.
-3. **Efficiency:** It uses "memory mapping" (`mmap`), so the data isn't actually copied between the kernel and user space; they both look at the same physical RAM.
+1. **Low Overhead:** The kernel doesn't have to wait for the user-space app. It just drops the data in the
+   buffer and moves on.
+2. **Memory Ordering:** It guarantees that the user-space app sees the events in the exact order they
+   happened in the kernel.
+3. **Efficiency:** It uses "memory mapping" (`mmap`), so the data isn't actually copied between the kernel
+   and user space; they both look at the same physical RAM.
 
 
 
@@ -817,7 +826,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | **Hash Maps** | Storing counters, flags, or configuration. |
 | **RingBuffer** | High-speed streaming of events/logs to user-space. |
 
-You now have a complete understanding of how to build, compile, load, and communicate with eBPF programs using Rust. 
+You now have a complete understanding of how to build, compile, load, and communicate with eBPF programs
+using Rust. 
 
 Next: template `Cargo.toml` and directory structure so you can start your first real-world project 
 
@@ -825,7 +835,8 @@ Next: template `Cargo.toml` and directory structure so you can start your first 
 
 # example project: 
 
-This is the "Full Package." To make a real-world project work, you need a specific directory layout so that `libbpf-cargo` knows where to find your C code and where to spit out the Rust skeleton.
+This is the "Full Package." To make a real-world project work, you need a specific directory layout so that
+`libbpf-cargo` knows where to find your C code and where to spit out the Rust skeleton.
 
 ### 1. The Directory Structure
 The most common pattern is to keep your BPF C code in a dedicated `src/bpf` folder.
@@ -895,7 +906,8 @@ fn main() {
 ---
 
 ### 4. Why use this specific setup?
-By using `OUT_DIR` (a temporary folder managed by Cargo), you avoid cluttering your source tree with generated files. In your `main.rs`, you simply "reach into" that folder to find your code:
+By using `OUT_DIR` (a temporary folder managed by Cargo), you avoid cluttering your source tree with
+generated files. In your `main.rs`, you simply "reach into" that folder to find your code:
 
 ```rust
 mod hello {
