@@ -241,7 +241,7 @@ Refer to : "00_rust_tools_ecosystem/27-ProgramaticTooling.md"
         - Generation: It writes a Rust file (the skeleton) that mirrors the structure of your C code.
 
 ------------------
-# Exampleour
+# Example
 
 To give you the "complete picture," we should look at how this was traditionally done in **C**, as it helps
 appreciate exactly what `libbpf-rs` and `libbpf-cargo` are automating for you in **Rust**.
