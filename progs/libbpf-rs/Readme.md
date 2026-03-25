@@ -933,3 +933,338 @@ You are now ready to build. I recommend starting by copying the **RingBuffer** c
 ------
 
 Next: Check the ./hello-bpf/ for more .
+
+-----
+
+# libbpf-cargo: source docs: HOWTO:
+
+1. `libbpf-cargo`: helps in develop and build eBPF programs with standard Rust tooling.
+
+2. `libbpf-cargo`: supports two interfaces:
+    * `SkeletonBuilder`: API that can be used with `build.rs` build script. 
+    * `cargo-libbpf`: cargo subcommands for use with cargo.
+
+  `SkeletonBuilder` the build script interface is recommended over the cargo sub-command interface as once
+  its setup you can not forget to update the generated skeletons if the source changes. 
+  Build scripts are standard practice for projects that include "codegen". 
+
+3. `cargo-libbpf`: consumes the following Cargo.toml configuration options:
+
+    * 
+    ```rust 
+    //! [package.metadata.libbpf]
+    //! prog_dir = "src/other_bpf_dir"  # default: <manifest_directory>/src/bpf 
+    //! target_dir = "other_target_dir" # default: <target_dir>/bpf 
+    ```
+    * `prog_dir`: path relative to package Cargo.toml to search for bpf progs
+    * `target_dir`: path relative to workspace target directory to place compiled bpf progs
+
+4. Subcommands
+    - build
+        `cargo libbpf build` compiles `<NAME>.bpf.c` C files into corresponding `<NAME>.bpf.o` ELF
+        object files. Each object file may contain one or more BPF programs, maps, and associated
+        metadata. The object file may then be handed over to `libbpf-rs` for loading and interaction.
+
+    - cargo-libbpf-build enforces a few conventions:
+        * source file names must be in the `<NAME>.bpf.c` format
+        * object file names will be generated in `<NAME>.bpf.o` format
+        * there may not be any two identical `<NAME>.bpf.c` file names in any two projects in a cargo
+          workspace.
+
+    - gen
+        - `cargo libbpf gen` generates a skeleton module for each BPF object file in the project.  
+        - Each `<NAME>.bpf.o` object file will have its own module. 
+        - One `mod.rs` file is also generated. 
+        - `All output files are placed into `package.metadata.libbpf.prog_dir`.
+
+    - make
+        - `cargo libbpf make` sequentially runs `cargo-libbpf-build`, `cargo-libbpf-gen`, and `cargo-build`
+          This is convenience command so that you don't forget any step.
+
+          Alternatively You can write a Makefile for your project.
+
+5. `SkeletonBuilder` builds and generates a single skeleton.
+
+    - This type is typically used from within a build scripts. (`build.rs`)
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use libbpf_cargo::SkeletonBuilder;
+    ///
+    /// SkeletonBuilder::new()
+    ///     .source("myobject.bpf.c")
+    ///     .clang("/opt/clang/clang")
+    ///     .build_and_generate("/output/path")
+    ///     .unwrap();
+    /// ```
+
+    #[derive(Debug)]
+    pub struct SkeletonBuilder {
+        source: Option<PathBuf>,
+        obj: Option<PathBuf>,
+        clang: Option<PathBuf>,
+        clang_args: Vec<OsString>,
+        rustfmt: PathBuf,
+        dir: Option<TempDir>,
+        reference_obj: bool,
+    }
+
+    impl Default for SkeletonBuilder {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl SkeletonBuilder {
+        /// Create a new [`SkeletonBuilder`].
+        pub fn new() -> Self {
+            Self {
+                source: None,
+                obj: None,
+                clang: None,
+                clang_args: Vec::new(),
+                rustfmt: "rustfmt".into(),
+                dir: None,
+                reference_obj: false,
+            }
+        }
+
+        /// Point the [`SkeletonBuilder`] to a source file for compilation
+        ///
+        /// Default is None
+        pub fn source<P: AsRef<Path>>(&mut self, source: P) -> &mut Self {
+            self.source = Some(source.as_ref().to_path_buf());
+            self
+        }
+
+        /// Point the [`SkeletonBuilder`] to an object file for generation
+        ///
+        /// Default is None
+        pub fn obj<P: AsRef<Path>>(&mut self, obj: P) -> &mut Self {
+            self.obj = Some(obj.as_ref().to_path_buf());
+            self
+        }
+
+        /// Specify which `clang` binary to use
+        ///
+        /// Default searches `$PATH` for `clang`
+        pub fn clang<P: AsRef<Path>>(&mut self, clang: P) -> &mut Self {
+            self.clang = Some(clang.as_ref().to_path_buf());
+            self
+        }
+
+        /// Pass additional arguments to `clang` when building BPF object file
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use libbpf_cargo::SkeletonBuilder;
+        ///
+        /// SkeletonBuilder::new()
+        ///     .source("myobject.bpf.c")
+        ///     .clang_args([
+        ///         "-DMACRO=value",
+        ///         "-I/some/include/dir",
+        ///     ])
+        ///     .build_and_generate("/output/path")
+        ///     .unwrap();
+        /// ```
+        pub fn clang_args<A, S>(&mut self, args: A) -> &mut Self
+        where
+            A: IntoIterator<Item = S>,
+            S: AsRef<OsStr>,
+        {
+            self.clang_args = args
+                .into_iter()
+                .map(|arg| arg.as_ref().to_os_string())
+                .collect();
+            self
+        }
+
+        /// Specify which `rustfmt` binary to use
+        ///
+        /// Default searches `$PATH` for `rustfmt`
+        pub fn rustfmt<P: AsRef<Path>>(&mut self, rustfmt: P) -> &mut Self {
+            self.rustfmt = rustfmt.as_ref().to_path_buf();
+            self
+        }
+
+        /// Reference the object file via `include_bytes!` instead of inlining
+        /// the raw bytes in the generated skeleton.
+        ///
+        /// When enabled, the generated skeleton uses `include_bytes!` to
+        /// reference the compiled BPF object file by path. This dramatically
+        /// reduces memory usage and build times for large object files, but
+        /// means the skeleton is no longer self-contained — the object file
+        /// must be present at its original path when rustc compiles the
+        /// skeleton.
+        ///
+        /// When no explicit [`obj`](Self::obj) path is set, the object file
+        /// is placed in `OUT_DIR` so that it persists for rustc. If `OUT_DIR`
+        /// is not set (e.g. outside a build script), an explicit `obj` path
+        /// must be provided.
+        ///
+        /// Default is `false` (inline bytes, self-contained skeleton).
+        pub fn reference_obj(&mut self, reference: bool) -> &mut Self {
+            self.reference_obj = reference;
+            self
+        }
+
+        /// Build BPF programs and generate the skeleton at path `output`
+        ///
+        /// # Notes
+        /// When used from a build script, you may be interested in
+        /// surfacing compiler warnings as part of the build. Please refer
+        /// to [`util::CargoWarningFormatter`] and its documentation for how
+        /// to go about that.
+        pub fn build_and_generate<P: AsRef<Path>>(&mut self, output: P) -> Result<()> {
+            self.build()?;
+            self.generate(output)?;
+
+            Ok(())
+        }
+
+        /// Build BPF programs without generating a skeleton.
+        ///
+        /// [`SkeletonBuilder::source`] must be set for this to succeed.
+        ///
+        /// # Notes
+        /// When used from a build script, you may be interested in
+        /// surfacing compiler warnings as part of the build. Please refer
+        /// to [`util::CargoWarningFormatter`] and its documentation for how
+        /// to go about that.
+        pub fn build(&mut self) -> Result<()> {
+            let source = self
+                .source
+                .as_ref()
+                .ok_or_else(|| anyhow!("No source file provided"))?;
+
+            let filename = source
+                .file_name()
+                .ok_or_else(|| anyhow!("Missing file name"))?
+                .to_str()
+                .ok_or_else(|| anyhow!("Invalid unicode in file name"))?;
+
+            if !filename.ends_with(".bpf.c") {
+                return Err(anyhow!(
+                    "Source `{}` does not have .bpf.c suffix",
+                    source.display()
+                ));
+            }
+
+            if self.obj.is_none() {
+                let name = filename.split('.').next().unwrap();
+                if self.reference_obj {
+                    // Place in OUT_DIR so the .o file persists after the build
+                    // script exits and is available when rustc processes
+                    // include_bytes! in the generated skeleton.
+                    let out_dir = env::var("OUT_DIR")
+                        .context("reference_obj requires OUT_DIR or an explicit obj path")?;
+                    // Hash the source path to avoid collisions when
+                    // multiple sources share the same name prefix.
+                    let hash = {
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::Hash;
+                        use std::hash::Hasher;
+                        let mut h = DefaultHasher::new();
+                        source.hash(&mut h);
+                        h.finish()
+                    };
+                    let objfile = PathBuf::from(out_dir).join(format!("{name}_{hash:016x}.o"));
+                    self.obj = Some(objfile);
+                } else {
+                    let dir = tempdir().context("failed to create temporary directory")?;
+                    let objfile = dir.path().join(format!("{name}.o"));
+                    self.obj = Some(objfile);
+                    // Hold onto tempdir so that it doesn't get deleted early
+                    self.dir = Some(dir);
+                }
+            }
+
+            let mut builder = BpfObjBuilder::default();
+            if let Some(clang) = &self.clang {
+                builder.compiler(clang);
+            }
+            builder.compiler_args(&self.clang_args);
+
+            // SANITY: Unwrap is safe here since we guarantee that obj.is_some() above.
+            builder
+                .build(source, self.obj.as_ref().unwrap())
+                .with_context(|| format!("failed to build `{}`", source.display()))
+        }
+
+        /// Generate a skeleton at path `output` without building BPF programs.
+        ///
+        /// [`SkeletonBuilder::obj`] must be set for this to succeed.
+        pub fn generate<P: AsRef<Path>>(&mut self, output: P) -> Result<()> {
+            let objfile = self.obj.as_ref().ok_or_else(|| anyhow!("No object file"))?;
+
+            r#gen::gen_single(
+                objfile,
+                r#gen::OutputDest::File(output.as_ref()),
+                Some(&self.rustfmt),
+                self.reference_obj,
+            )
+            .with_context(|| format!("failed to generate `{}`", objfile.display()))?;
+
+            Ok(())
+        }
+    }
+
+6. `libbpf-cargo`: does all the heavy lifting during `cargo build` process:
+   - **Job 1**: Compilation of C to bytecode, invokes `clang` with correct flags `-target bpf`, `-g` for BTF
+     information, to turn `.bpf.c` to `.bpf.o` ELF object files.
+   - **Job 2**: Skeleton Generation: Instead of generating C header file which is done with `libbpf`
+     development, `libbpf-cargo` generates Rust Code. ( Rust Module )
+     - It parses the `bpf.o` file,
+     - uses `bpftool` (internally or bundled) to extract program definitions 
+     - Creates a Rust Module (usually `my_prg_file.skel.rs`) that contains:
+     `struct MyProgSkel`
+
+7. Once `libbpf-cargo` performs the above 2 jobs, `libbpf-rs` has every thing to compile the user-space
+   code. 
+
+---
+# `libbpf-rs` :
+
+1. Once bytecode and skeleton modules are ready, `libbpf-rs` can perform other tasks:
+    - loading, hook/attachment, maps ..
+    - make the `bpf()` call.
+
+2. Loading: 
+   - `libbpf-rs` takes that embedded bytecode and makes the `bpf()` system calls to:
+       * Upload the code to the kernel.
+       * Verify it (triggering the Kernel Verifier to ensure your C code won't crash the system).
+       * Relocate it (CO-RE magic). If C code looks for a kernel struct field that moved, libbpf-rs fixes
+         the memory offsets on the fly so it still work
+
+3. The Hook / Attacher
+   - A loaded program does nothing until it's attached to an event. `libbpf-rs` provides the safe Rust
+     methods to:
+     * Attach a `kprobe` to a kernel function.
+     * Hook an XDP program to a network interface.
+     * Link a tracepoint to a system event.
+
+4. The Data Bridge (Maps)
+   - This is where you spend most of your time. `libbpf-rs` provides the API to read and write to BPF maps.
+   - If your BPF program (C) counts packets and puts the total in a map, your Rust code uses `libbpf-rs`
+     to pull that number out and print it.
+
+   It handles the complex Ring Buffer or Perf Buffer logic, allowing the kernel to stream high-speed data
+   to your Rust app without dropping packets.
+
+5. Safety & Lifecycle Management
+   - Rust ownership. `libbpf-rs` ensures:
+     * If Rust Object goes out of scope, the BPF programs are cleanly detached and unloaded
+       (preventing "zombie" BPF programs).
+     * It provides Type Safety. The generated skeleton uses `libbpf-rs` types so you can't accidentally
+       treat a "Hash Map" like a "Ring Buffer."
+
+
+| Phase | Tool | What happens? |
+| :--- | :--- | :--- |
+| **Build Time** | `libbpf-cargo` | Compiles `.c` to `.o`, generates `.rs` skeleton. |
+| **Start Up** | `libbpf-rs` | Opens the skeleton, loads bytecode into Kernel. |
+| **Running** | `libbpf-rs` | Attaches hooks; Reads/Writes Map data. |
+| **Shut Down** | `libbpf-rs` | Detaches programs and cleans up kernel memory. |
+    

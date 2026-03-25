@@ -110,6 +110,22 @@ On compilation a eBPF program with CO-RE:
 
 ### Skeleton Generation:
 
+
+Skeleton files act as a glue between the kernel eBPF code and the user-space loader code.
+
+First the eBPF programs are compiled to BPF object files ( using clang )
+
+Next we use `bpftool` to strip these compiled object files and wrap it into a C header file. 
+
+These generated skeleton files are used by the loader program, its included in the user-space code as
+header.
+
+The generated skeleton header contains:
+    - Embedded bytecode: The actual BPF instructions are stored as string within the header, so you dont
+      have to strip a separate `.o` file with your binary.
+    - Structure Definitions: It automatically creates C structures that match your BPF maps and global
+      variables, allowing you to access them by name (e.g., skel->maps.my_map) instead of using lookups.
+
 - `libbpf` works with a tool called `bpftool` to generate a "skeleton" (a C header file). 
 - This makes it incredibly easy for your user-space application (the part you interact with) to talk to
   your kernel-space `eBPF` program. 
@@ -120,6 +136,13 @@ On compilation a eBPF program with CO-RE:
 
   `bpftool btf dump file /sys/kernel/btf/vmlinux format c > include/vmlinux.h`
 
+Note:
+---
+Before skeletons existed, developers manually called `bpf_object__open()` and find map file descriptors by 
+string names. It was error-prone and tedious. The skeleton makes the BPF program feel like a native
+library, providing type safety and auto-loading capabilities.
+
+---
 ###  Advance program tricks:
 
 - CO-RE provides several macros for safely reading kernel structures with automatic relocation.
