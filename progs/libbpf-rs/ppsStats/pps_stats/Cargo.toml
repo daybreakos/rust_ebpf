@@ -1,0 +1,15 @@
+[package]
+name = "pps_stats"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libbpf-rs = "0.26.1"
+libc = "0.2.183"
+ctrlc = "3.5.2"
+plain = "0.2.3"
+nix = { version = "0.31.2", features = ["net"] }
+clap = { version = "4.6.0", features = ["derive"] } 
+
+[build-dependencies]
+libbpf-cargo = "0.26.1"

@@ -1,0 +1,112 @@
+use clap::Parser;
+use libbpf_rs::skel::{OpenSkel, Skel, SkelBuilder};
+// use std::mem::MaybeUninit;
+use std::net::Ipv4Addr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
+
+// Include the generated skeleton from build.rs
+mod pps_stats {
+    include!(concat!(env!("OUT_DIR"), "/pps_stats.skel.rs"));
+}
+
+#[repr(C)]
+#[derive(Default, Clone, Copy, Debug)]
+struct DataRec {
+    packets: u64,
+    bytes: u64,
+}
+
+/// A professional XDP PPS monitoring tool built with libbpf-rs
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Name of the network interface to monitor (e.g., eth0, enp3s0)
+    #[arg(short, long)]
+    interface: String,
+
+    /// Interval between updates in seconds
+    #[arg(short, long, default_value_t = 1)]
+    interval: u64,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Parse Arguments
+    let args = Args::parse();
+
+    // Convert interface name to index
+    let ifindex = nix::net::if_::if_nametoindex(args.interface.as_str())? as i32;
+
+    // 2. Load Skeleton
+    // prepare memory for BPF obj
+    // let mut open_obj = MaybeUninit::uninit();
+    // Open phase
+
+    let mut skel_builder = pps_stats::PpsStatsSkelBuilder::default();
+    //open phase
+    let open_skel = skel_builder.open()?;
+    //load phase
+    let mut skel = open_skel.load()?;
+
+    // 3. Attach XDP
+    // attach_xdp() in libbpf-rs tries Native then Generic automatically
+    let _link = skel.progs_mut().xdp_stats_prog().attach_xdp(ifindex)?;
+
+    println!(">>> Monitoring interface: {}", args.interface);
+    println!(">>> Press Ctrl+C to stop.");
+
+    // 4. Graceful Shutdown Setup
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    })?;
+
+    let mut prev_pkts = 0u64;
+    let mut prev_bytes = 0u64;
+
+    // 5. Main Stats Loop
+    while running.load(Ordering::SeqCst) {
+        sleep(Duration::from_secs(args.interval));
+
+        let mut total_pkts = 0u64;
+        let mut total_bytes = 0u64;
+
+        let key = 0u32.to_ne_bytes();
+
+        // Per-CPU Map Aggregation
+        if let Some(raw_values) = skel
+            .maps()
+            .pkt_count()
+            .lookup_percpu(&key, libbpf_rs::MapFlags::empty())?
+        {
+            for cpu_bytes in raw_values {
+                let rec: DataRec = unsafe { std::ptr::read(cpu_bytes.as_ptr() as *const _) };
+                total_pkts += rec.packets;
+                total_bytes += rec.bytes;
+            }
+        }
+
+        let delta_pkts = total_pkts.saturating_sub(prev_pkts);
+        let delta_bytes = total_bytes.saturating_sub(prev_bytes);
+        let mbps = (delta_bytes as f64 * 8.0) / 1_000_000.0;
+        let avg_sz = if delta_pkts > 0 {
+            delta_bytes / delta_pkts
+        } else {
+            0
+        };
+
+        println!(
+            "PPS: {:<10} | Mbps: {:<10.2} | Avg Size: {:<5} B | Total: {}",
+            delta_pkts, mbps, avg_sz, total_pkts
+        );
+
+        prev_pkts = total_pkts;
+        prev_bytes = total_bytes;
+    }
+
+    println!("\nDetaching XDP and exiting...");
+    Ok(())
+}
