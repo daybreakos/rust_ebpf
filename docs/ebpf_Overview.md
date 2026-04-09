@@ -560,7 +560,7 @@ modern `eBPF` development in Rust possible.
 
 ## CO-RE: 
 
-- Big reason for `bindgen` or `aya-tool` are so powerful is `eBPF`is a feature called CO-RE. 
+- Major reason why `bindgen` or `aya-tool` are so powerful for `eBPF`is a feature called CO-RE. 
     * If a offset of a field in a struct is changed from say 16 to 20 , the eBPF program would break.
     * With `bindgen` + CO-RE:
         - `bindgen` tags the generated Rust struct with metadata 

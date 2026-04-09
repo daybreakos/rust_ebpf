@@ -14,7 +14,8 @@ decisions the system has to make every second.
   (1518-1522 bytes depends on VLAN tagging), 1500 bytes for IP packets ( with 20 bytes for IP header, 20
   bytes for the TCP header and 1460 payload or Max segment size or MSS)
 
-- Jumbo Frames when the MTU is larger than 1500 bytes which is common in high-performance data centers, throughput reduce processing overhead. 
+- Jumbo Frames when the MTU is larger than 1500 bytes which is common in high-performance data centers,
+  throughput reduce processing overhead. 
 
 - NIC driver handles every packet, which generally triggers an interrupt, memory allocation and routing. 
 
