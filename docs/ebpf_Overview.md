@@ -40,9 +40,40 @@
     - Reading/writing data to eBPF maps.
     - Accessing process context (PID, UID, cgroups).
     - Modifying network packets or performing redirects.
-    - Printing debug messages.
+    - Printing debug messages. 
 
+    - Below are the list of stable helper functions the eBPF programs can call:
+        * map operations
+            * `bpf_map_lookup_elem`
+            * `bpf_map_update_elem`
+        * packet operations
+            * `bpf_skb_store_bytes`
+            * `bpf_redirect`
+        * context/process access
+            * `bpf_get_current_pid_tgid`
+            * `bpf_get_current_comm`
+        * debugging
+            * `bpf_trace_printk`
+        These helpers are exposed by the kernel verifier/runtime.
 
+    - Both libbpf-c or Aya both call same kernel helper functions. 
+    - Example: 
+        - Helper `c`:   `bpf_map_lookup_elem()` this is kernel eBPF helper.
+        - In C/libbpf: you use it as `void *value = bpf_map_lookup_elem(&my_map, &key);`
+        - in Aya/Rust: Aya exposes Rust bindings/wrappers around the same helpers:
+            `use aya_ebpf::helpers::bpf_map_lookup_elem;`
+            or more commonly through types map APIs: 
+            `MY_MAP.get(&key)l`
+          Internally Aya emits the same helper call instruction in eBPF bytecode.
+
+    - Helpers are not linked like userspace lib function: Instead by eBPF instruction `CALL helper_id`
+        ```c 
+            helper ID 1 → bpf_map_lookup_elem
+            helper ID 2 → bpf_map_update_elem
+        ```
+        So both C/Rust eventually compile down to `CALL <helper id>`
+
+    
 ### Maps:
 
 * **eBPF Maps:** 
@@ -593,7 +624,7 @@ modern `eBPF` development in Rust possible.
     ```
 
 - Differences between `bindgen` vs `aya-tool`
-    Unline `bindgen` **BTF** usually contains:
+    Unlike `bindgen` **BTF** usually contains:
     - `struct` definitions
     - `enums`
     - `typedefs`
@@ -604,6 +635,6 @@ modern `eBPF` development in Rust possible.
         - tracepoint -> stable tracing events. 
         ...
 
-    => so with aya-tool you genearte **data structures**, then attach to kernel functions using probes. 
+    => so with aya-tool you generate **data structures**, then attach to kernel functions using probes. 
 
 
