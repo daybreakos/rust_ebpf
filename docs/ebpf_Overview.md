@@ -255,8 +255,7 @@ specialized *BPF* back-end emits the final bytecode.
 3. **Backend:** 
     - The LLVM BPF backend transforms IR into an **ELF object file** containing eBPF bytecode instructions.
 4. **Linking:** 
-    - Typically, no "linking" is done in the traditional sense until `libbpf` loads the ELF and performs
-      **CO-RE**.
+    - Typically, no "linking" is done in the traditional sense. Instead a loader library  like `libbpf`  parses the ELF run time, resolves re-locations and performs **CO-RE** adjustments before injecting into the kernel.
 
 #### Rust / Aya (The "Modern" Way)
 
@@ -265,7 +264,8 @@ specialized *BPF* back-end emits the final bytecode.
 2. **Frontend:** 
     - `rustc` compiles Rust into LLVM IR.
 3. **Linker:** 
-    - Since Rust's standard linker doesn't understand *BPF*, you use **`bpf-linker`**. 
+    - Since Rust's standard linker doesn't understand the architectural constraints of the BPF VM,
+      you use **`bpf-linker`**. 
     - **`bpf-linker`** performs static linking and optimizations (like dead code elimination) specifically
       for the `eBPF` VM.
 4. **Result:** 

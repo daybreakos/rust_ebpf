@@ -739,4 +739,92 @@ By avoiding `libbpf`, Aya gains a few "Rust-native" superpowers:
 Aya essentially proves that you don't *need* a skeleton file if your language is powerful enough to parse
 ELF files and BTF info at runtime! 
 
-ToDo: How Aya handles CO-RE.
+
+---
+## CO-RE: ( How Aya handles CO-RE )
+
+In standard C-based eBPF development, **CO-RE (Compile Once – Run Everywhere)** relies heavily on `clang`
+recording struct layout intents, saving them to a `.BTF.ext` ELF section, and handing that over to `libbpf`
+to patch at runtime.
+
+Aya achieves the exact same result, but it cuts out `libbpf` entirely. Aya is a **pure-Rust loader**, meaning it parses the ELF and performs the runtime byte-patching itself using Rust code.
+
+Here is the breakdown of how Aya performs CO-RE under the hood:
+
+---
+
+### 1. Compile Time: Capturing the Intent
+
+When you write Rust code that reads kernel structures (e.g., extracting the process ID from `task_struct`),
+the exact memory layout of that struct might change across different Linux kernel versions.
+
+To handle this:
+
+* **The Macro Layer:** Aya uses dedicated macros or attributes (historically generated via `aya-tool` /
+  `bindgen` or via modern `#[btf_preserve_access]` attributes) when interacting with kernel types.
+* **LLVM Intrinsics:** When `rustc` hands the code over to the LLVM backend, these annotations translate
+  into specific LLVM intrinsics: `llvm.preserve.struct.access.index` and
+  `llvm.preserve.array.access.index`.
+* **The Record Generation:** The **`bpf-linker`** and the LLVM backend see these intrinsics and, instead of
+  compiling a hardcoded memory offset, they emit:
+1. A **placeholder instruction** in the bytecode (usually using an offset of `0`).
+2. A **CO-RE relocation record** inside the `.BTF.ext` section of the ELF file.
+
+
+
+> **What a relocation record looks like:** > It effectively says: *"Hey loader, at instruction #14, the
+> code is trying to read the field named `pid` inside a struct named `task_struct`."*
+
+---
+
+### 2. Runtime: The Aya Loader Steps In
+
+When your userspace Aya application boots up and attempts to load the eBPF ELF file into the kernel, Aya
+performs the relocation dance:
+
+```
+[ Aya Userspace Loader ]
+   │
+   ├── 1. Parses local eBPF ELF ──> Reads .BTF.ext ("I need task_struct->pid")
+   ├── 2. Parses target system  ──> Reads /sys/kernel/btf/vmlinux ("Ah, pid is at offset 2160 here")
+   │
+   └── 3. Patches Bytecode ───────> Replaces dummy offset (0) with real offset (2160)
+                                      │
+                                      ▼
+                           [ Injects into Kernel ]
+
+```
+
+#### Step A: Reading the Target Kernel's DNA
+
+Aya opens and parses `/sys/kernel/btf/vmlinux`. This file contains the live **BTF (BPF Type Format)** data
+of the running host kernel—a lightweight dictionary mapping every struct, field, and offset currently alive
+in that system's memory.
+
+#### Step B: Matching the Request
+
+Aya's userspace library parses the `.BTF.ext` section of your compiled eBPF binary. It matches the
+*intended* access pattern against the *actual* layout found in `/sys/kernel/btf/vmlinux`.
+
+For example:
+
+* **Your program expects:** `task_struct` -> `pid`.
+* **Aya checks `vmlinux`:** Finds `task_struct` and calculates that on *this specific kernel*, `pid`
+  happens to live exactly `2160` bytes from the struct's base pointer.
+
+#### Step C: Hot-Patching the Bytecode
+
+Before Aya hands the bytecode over to the `bpf()` system call, it loops through the instructions targeting
+those fields. It directly overwrites the dummy immediate values (`imm`) in the bytecode with the actual
+calculated offset (e.g., changing `0` to `2160`).
+
+---
+
+### Summary of Differences
+
+| Feature | The C / `libbpf` Way | The Rust / `Aya` Way |
+| --- | --- | --- |
+| **Compiler Emit** | Clang attributes | `rustc` + `bpf-linker` via LLVM intrinsics |
+| **Relocation Metadata** | Embedded in ELF (`.BTF` & `.BTF.ext`) | Embedded in ELF (`.BTF` & `.BTF.ext`) |
+| **Who Patches Bytecode?** | `libbpf` (C shared library) | **`aya`** (Pure Rust crate running in userspace) |
+| **Runtime Dependency** | Requires `libbpf` / LLVM on machine | **Zero dependencies** (statically compiled Rust binary) |
