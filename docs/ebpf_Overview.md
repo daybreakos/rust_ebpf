@@ -637,4 +637,122 @@ modern `eBPF` development in Rust possible.
 
     => so with aya-tool you generate **data structures**, then attach to kernel functions using probes. 
 
+---
+# eBPF helper functions:
 
+eBPF helpers are explicitly part of the Linux kernel's User API (UAPI), they are guaranteed to remain stable over time. You can find the canonical, source-of-truth documentation directly from the Linux Kernel:  
+- [eBPF Helpers](https://docs.ebpf.io/linux/helper-function/#:~:text=Although%20helper%20functions%20are%20not,Linux%20Kernel%20(userspace)%20API. )
+- For Comprehensive reference refer to `man 7 bpf-helpers` 
+- They can also be found in kernel source code: where a definitive list and its exact implementation constraints are defined in kerenl source under ( include/uapi/linux/bpf.h. )
+- For a highly readable, searchable web reference that categorizes these helpers by usage (e.g., networking, tracing, maps), check out docs.ebpf.io.
+
+The `eBPF` programs cannot call arbitrary kernel functions. 
+Instead, they call a stable API of "Helpers" to  perform tasks like:
+    - Reading/writing data to eBPF maps.
+    - Accessing process context (PID, UID, cgroups).
+    - Modifying network packets or performing redirects.
+    - Printing debug messages. 
+Such as :
+        * map operations
+            * `bpf_map_lookup_elem`
+            * `bpf_map_update_elem`
+        * packet operations
+            * `bpf_skb_store_bytes`
+            * `bpf_redirect`
+        * context/process access
+            * `bpf_get_current_pid_tgid`
+            * `bpf_get_current_comm`
+        * debugging
+            * `bpf_trace_printk`
+        These helpers are exposed by the kernel verifier/runtime.
+
+- Both libbpf-c or Aya both call same kernel helper functions. 
+- Example: 
+        - Helper `c`:   `bpf_map_lookup_elem()` this is kernel eBPF helper.
+        - In C/libbpf: you use it as `void *value = bpf_map_lookup_elem(&my_map, &key);`
+        - in Aya/Rust: Aya exposes Rust bindings/wrappers around the same helpers:
+            `use aya_ebpf::helpers::bpf_map_lookup_elem;`
+            or more commonly through types map APIs: 
+            `MY_MAP.get(&key)l`
+
+Aya: Its designed to provide idiomatic Rust developer experience, 
+Instead of making you manually manage pointers and invoke raw C-style helper functions, Aya abstracts them into type-safe Rust paradigms within your kernel-space code (the code that compiles down to the bpf-linker target).
+
+Aya splits these helpers into two categories: High-level wrappers and Raw generated bindings. 
+1. High-Level Idiomatic Wrappers (The Preferred Way)
+For common actions like writing to maps, logging, or reading process info, Aya wraps the helpers in standard Rust APIs or macros found in the aya_ebpf crate.
+
+- Reading/Writing Maps: You do not call bpf_map_lookup_elem. Instead, you interact with type-safe Rust structs like HashMap.
+
+- Printing Debug Messages: Instead of dealing with bpf_trace_printk, you use the aya_log_ebpf crate, which provides standard Rust info!, debug!, and warn! macros.
+
+Here is an example showing how maps and process contexts are handled cleanly in Aya:
+
+```rust
+#![no_std]
+#![no_main]
+
+use aya_ebpf::{
+    macros::{kprobe, map},
+    maps::HashMap,
+    helpers::bpf_get_current_pid_tgid, // High-level function wrapper
+};
+use aya_log_ebpf::info; // Behind the scenes, this wraps bpf_trace_printk / ring_buf
+
+#[map]
+static COUNTERS: HashMap<u32, u64> = HashMap::with_max_entries(1024, 0);
+
+#[kprobe]
+pub fn my_kprobe(ctx: aya_ebpf::programs::ProbeContext) -> u32 {
+    // 1. Accessing Process Context
+    // bpf_get_current_pid_tgid() returns a u64 containing both PID and TGID
+    let pid_tgid = bpf_get_current_pid_tgid();
+    let pid = (pid_tgid >> 32) as u32;
+
+    // 2. Interacting with Maps (Idiomatic Rust API instead of bpf_map_lookup_elem)
+    if let Some(counter) = unsafe { COUNTERS.get_mut(&pid) } {
+        *counter += 1;
+    } else {
+        let _ = COUNTERS.insert(&pid, &1, 0);
+    }
+
+    // 3. Printing Debug Messages
+    info!(&ctx, "Kprobe triggered by PID: {}", pid);
+
+    0
+}
+
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+```
+
+2. Raw Underlying Bindings (The Fallback)
+If Aya hasn't written a pretty Rust wrapper for a highly specific helper function yet (such as certain obscure network packet redirection helpers), you can still fall back to the raw, unsafe C-equivalent bindings generated directly from the kernel.
+
+These live under aya_ebpf::bindings::helpers (aliased as aya_ebpf::helpers::gen).
+
+```rust
+use aya_ebpf::helpers::gen as raw_helpers;
+
+// Example of falling back to a raw kernel helper function 
+// Note that you must handle raw pointers and wrap it in an `unsafe` block.
+unsafe {
+    raw_helpers::bpf_redirect(ifindex, flags);
+}
+```
+
+recap:
+- aya_ebpf::maps::*: Abstracted map interactions.
+- aya_ebpf::helpers::*: Higher-level wrappers for process context tools (bpf_get_current_comm, bpf_get_current_uid_gid, bpf_probe_read_kernel, etc.).
+- aya_ebpf::bindings::helpers::*: The raw, literal 1:1 bindings mapping to bpf-helpers(7)
+
+Relationship between Aya abstractions and the underlying eBPF helper API.
+- Kernel helpers (bpf_map_lookup_elem, bpf_get_current_pid_tgid, etc.) are stable eBPF UAPI functions exposed by the Linux kernel.
+- libbpf and Aya ultimately invoke the same kernel helpers.
+- aya_ebpf::maps::* provides type-safe Rust abstractions over map-related helpers.
+- aya_ebpf::helpers::* provides ergonomic Rust wrappers around commonly used helpers.
+- aya_log_ebpf::* provides Rust logging macros that internally use kernel-supported eBPF event/logging mechanisms.
+- aya_ebpf::helpers::gen::* (or equivalent generated bindings) exposes low-level helper interfaces when no high-level wrapper exists.
+- When using raw helper bindings, developers are responsible for handling unsafe operations, pointers, and verifier constraints themselves.
